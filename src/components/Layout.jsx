@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.jsx'
+import ChatBubble from '../chat/ChatBubble'
 
 const staffTabs = [
   { to: '/tickets', label: 'Tickets', icon: TicketIcon },
@@ -35,6 +36,9 @@ export default function Layout() {
       <main className="flex-1 overflow-y-auto pb-20 px-4 py-4">
         <Outlet />
       </main>
+
+      {/* Chat */}
+      <ChatBubble />
 
       {/* Bottom tabs */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around py-2 z-50">
