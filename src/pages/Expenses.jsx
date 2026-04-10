@@ -5,13 +5,11 @@ import { PAYMENT_MODES, EXPENSE_CATEGORIES } from '../utils/services.jsx'
 import { formatFCFA } from '../utils/fcfa.jsx'
 import PhotoUpload from '../components/PhotoUpload'
 
-function todayStr() { return new Date().toISOString().slice(0, 10) }
-
 export default function Expenses() {
   const { isAdmin } = useAuth()
-  const [expenses, setExpenses] = useState(() => store.getExpenses(todayStr()))
+  const [expenses, setExpenses] = useState(() => store.getExpenses(store.businessDay()))
   const [showForm, setShowForm] = useState(false)
-  const refresh = useCallback(() => setExpenses(store.getExpenses(todayStr())), [])
+  const refresh = useCallback(() => setExpenses(store.getExpenses(store.businessDay())), [])
 
   const total = expenses.reduce((sum, e) => sum + (e.amount || 0), 0)
 
@@ -76,7 +74,7 @@ function ExpenseForm({ onClose }) {
     if (!photoId) { alert('La photo du recu est obligatoire.'); return }
     setLoading(true)
     store.addExpense({
-      date: todayStr(),
+      date: store.businessDay(),
       description: form.description.trim(),
       category: form.category,
       amount: Number(form.amount) || 0,
