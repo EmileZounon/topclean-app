@@ -1,7 +1,7 @@
 // French natural language parser for TopClean+ actions
 // Detects intent + extracts fields from casual French text
 
-import { SERVICES, PAYMENT_MODES, EXPENSE_CATEGORIES } from '../utils/services.jsx'
+import { SERVICES, PAYMENT_MODES, EXPENSE_CATEGORIES, countItems } from '../utils/services.jsx'
 import * as store from '../store'
 import { exportWeeklyExcel } from '../utils/exportExcel'
 import { formatFCFA } from '../utils/fcfa.jsx'
@@ -10,7 +10,8 @@ const SERVICE_ALIASES = {
   pressing: 'pressing', press: 'pressing', blanchisserie: 'pressing', blanch: 'pressing',
   lessive: 'lessive', laverie: 'lessive', lavage: 'lessive', laver: 'lessive',
   nettoyage: 'nettoyage', menage: 'nettoyage', maison: 'nettoyage', batiment: 'nettoyage', nettoyer: 'nettoyage',
-  canape: 'canape', matelas: 'canape', sofa: 'canape',
+  canape: 'canape', sofa: 'canape',
+  matelas: 'matelas',
   desinfection: 'desinfection', desinfecter: 'desinfection',
 }
 
@@ -84,6 +85,33 @@ function extractPieces(text) {
   return match ? parseInt(match[1], 10) : 1
 }
 
+const PIECE_ALIASES = {
+  chemise: 'chemise', chemises: 'chemise',
+  pantalon: 'pantalon', pantalons: 'pantalon',
+  costume: 'costume', costumes: 'costume', complet: 'costume', complets: 'costume',
+  robe: 'robe', robes: 'robe',
+  jupe: 'jupe', jupes: 'jupe',
+  veste: 'veste', vestes: 'veste', blazer: 'veste', blazers: 'veste',
+  drap: 'drap', draps: 'drap',
+}
+
+function extractDetailedItems(text) {
+  const items = []
+  const regex = /(\d+)\s*(chemises?|pantalons?|costumes?|complets?|robes?|jupes?|vestes?|blazers?|draps?)/gi
+  let match
+  while ((match = regex.exec(text)) !== null) {
+    const qty = parseInt(match[1], 10)
+    const typeKey = normalize(match[2])
+    const type = PIECE_ALIASES[typeKey]
+    if (type && qty > 0) {
+      const existing = items.find(i => i.type === type)
+      if (existing) existing.qty += qty
+      else items.push({ type, qty })
+    }
+  }
+  return items.length > 0 ? items : null
+}
+
 function detectIntent(text) {
   const norm = normalize(text)
 
@@ -109,7 +137,7 @@ function detectIntent(text) {
 
 export function processMessage(text) {
   const intent = detectIntent(text)
-  const today = new Date().toISOString().slice(0, 10)
+  const today = store.businessDay()
 
   switch (intent) {
     case 'export': {
@@ -197,19 +225,22 @@ export function processMessage(text) {
       const service = findService(text)
       const mode = findPaymentMode(text)
       const pieces = extractPieces(text)
+      const detailedItems = extractDetailedItems(text)
 
       if (!clientName && amounts.length === 0) {
-        return { type: 'error', message: 'Je n\'ai pas compris. Essayez:\n"Mme Adjovi pressing 3 pieces 50000 avance 25000 momo"' }
+        return { type: 'error', message: 'Je n\'ai pas compris. Essayez:\n"Mme Adjovi pressing 2 chemises 1 pantalon 50000 avance 25000 momo"' }
       }
 
       const ca = amounts[0] || 0
       const advance = amounts[1] || ca
+      const serviceType = service || 'pressing'
+      const items = detailedItems || pieces
 
       const ticket = store.addTicket({
         date: today,
         clientName: clientName || 'Client',
-        serviceType: service || 'pressing',
-        items: pieces,
+        serviceType,
+        items,
         caFacture: ca,
         advance: Math.min(advance, ca),
         paymentMode: mode,
@@ -217,9 +248,13 @@ export function processMessage(text) {
       })
 
       const sLabel = SERVICES.find(s => s.id === ticket.serviceType)?.label || ticket.serviceType
+      const itemsSummary = Array.isArray(ticket.items)
+        ? ticket.items.map(i => `${i.qty}× ${i.type}`).join(', ')
+        : `${countItems(ticket.items)} pièce(s)`
+
       return {
         type: 'success',
-        message: `✅ Ticket cree:\n• Client: ${ticket.clientName}\n• Service: ${sLabel}\n• CA: ${formatFCFA(ticket.caFacture)}\n• Avance: ${formatFCFA(ticket.totalPaid)}\n• Reste: ${formatFCFA(ticket.remainingBalance)}\n• Mode: ${mode}`,
+        message: `✅ Ticket créé:\n• Client: ${ticket.clientName}\n• Service: ${sLabel}\n• Pièces: ${itemsSummary}\n• CA: ${formatFCFA(ticket.caFacture)}\n• Avance: ${formatFCFA(ticket.totalPaid)}\n• Reste: ${formatFCFA(ticket.remainingBalance)}\n• Mode: ${mode}`,
       }
     }
 
