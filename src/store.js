@@ -23,6 +23,36 @@ function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
 }
 
+// ─── Business Day (10h–10h) ─────────────────────
+export function businessDay() {
+  const now = new Date()
+  if (now.getHours() < 10) {
+    const yesterday = new Date(now)
+    yesterday.setDate(yesterday.getDate() - 1)
+    return yesterday.toISOString().slice(0, 10)
+  }
+  return now.toISOString().slice(0, 10)
+}
+
+// Find days that have tickets or expenses but no closing (up to 7 days back)
+export function getUnclosedDays() {
+  const allTickets = getAll(KEYS.tickets)
+  const allExpenses = getAll(KEYS.expenses)
+  const closings = JSON.parse(localStorage.getItem(KEYS.dailyClosing) || '{}')
+  const today = businessDay()
+
+  // Collect all dates that have activity
+  const activeDates = new Set()
+  allTickets.forEach(t => activeDates.add(t.date))
+  allExpenses.forEach(e => activeDates.add(e.date))
+
+  // Filter to dates that have no closing and are before today
+  return [...activeDates]
+    .filter(d => d < today && !closings[d])
+    .sort()
+    .slice(-7) // last 7 unclosed days max
+}
+
 // ─── Tickets ─────────────────────────────────────
 export function getTickets(date) {
   return getAll(KEYS.tickets).filter((t) => t.date === date).sort((a, b) => b.createdAt - a.createdAt)
@@ -52,6 +82,8 @@ export function addTicket(ticket) {
     totalPaid: advance,
     remainingBalance: ca - advance,
     status: 'pending',
+    intakeMode: ticket.intakeMode || 'depot_boutique',
+    deliveryMode: null,
     createdAt: Date.now(),
     photoId: ticket.photoId || null,
   }
@@ -83,6 +115,14 @@ export function updateTicketStatus(id, status, flagNote) {
   all[idx].status = status
   if (flagNote) all[idx].flagNote = flagNote
   all[idx].approvedAt = Date.now()
+  setAll(KEYS.tickets, all)
+}
+
+export function updateTicketDelivery(id, deliveryMode) {
+  const all = getAll(KEYS.tickets)
+  const idx = all.findIndex((t) => t.id === id)
+  if (idx === -1) return
+  all[idx].deliveryMode = deliveryMode
   setAll(KEYS.tickets, all)
 }
 
