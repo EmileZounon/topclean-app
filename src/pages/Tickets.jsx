@@ -1,19 +1,17 @@
 import { useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import * as store from '../store'
-import { SERVICES, PAYMENT_MODES } from '../utils/services.jsx'
+import { SERVICES, PAYMENT_MODES, INTAKE_MODES, usesItemPicker, countItems } from '../utils/services.jsx'
 import { formatFCFA } from '../utils/fcfa.jsx'
 import PhotoUpload from '../components/PhotoUpload'
-
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
-}
+import ItemPicker from '../components/ItemPicker'
 
 export default function Tickets() {
-  const [tickets, setTickets] = useState(() => store.getTickets(todayStr()))
+  const today = store.businessDay()
+  const [tickets, setTickets] = useState(() => store.getTickets(today))
   const [showForm, setShowForm] = useState(false)
 
-  const refresh = useCallback(() => setTickets(store.getTickets(todayStr())), [])
+  const refresh = useCallback(() => setTickets(store.getTickets(today)), [today])
 
   return (
     <div>
@@ -56,9 +54,9 @@ export default function Tickets() {
               </div>
             </div>
             <div className="flex gap-3 mt-2 text-xs text-slate-400">
+              <span>{countItems(t.items)} pièce{countItems(t.items) > 1 ? 's' : ''}</span>
               <span>Avance: {formatFCFA(t.totalPaid)}</span>
               <span>Reste: {formatFCFA(t.remainingBalance)}</span>
-              <span className="capitalize">{t.payments?.[0]?.paymentMode || ''}</span>
             </div>
           </Link>
         ))}
@@ -80,10 +78,20 @@ function TicketForm({ onClose }) {
     clientName: '',
     serviceType: 'pressing',
     items: 1,
+    detailedItems: [],
+    intakeMode: 'depot_boutique',
     caFacture: '',
     advance: '',
     paymentMode: 'cash',
   })
+
+  const showPicker = usesItemPicker(form.serviceType)
+  const service = SERVICES.find((s) => s.id === form.serviceType)
+  const ca = Number(form.caFacture) || 0
+  const advance = Number(form.advance) || 0
+  const advancePct = ca > 0 ? Math.round((advance / ca) * 100) : 0
+  const showAdvanceWarning =
+    service?.minAdvancePct > 0 && ca > 0 && advance > 0 && advancePct < service.minAdvancePct
 
   function update(field) {
     return (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
@@ -103,13 +111,14 @@ function TicketForm({ onClose }) {
     e.preventDefault()
     setLoading(true)
     store.addTicket({
-      date: todayStr(),
+      date: store.businessDay(),
       clientName: form.clientName.trim(),
       serviceType: form.serviceType,
-      items: Number(form.items) || 1,
+      items: showPicker ? form.detailedItems : (Number(form.items) || 1),
       caFacture: Number(form.caFacture) || 0,
       advance: Number(form.advance) || 0,
       paymentMode: form.paymentMode,
+      intakeMode: form.intakeMode,
       photoId,
     })
     setLoading(false)
@@ -120,6 +129,7 @@ function TicketForm({ onClose }) {
     <form onSubmit={handleSubmit} className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 mb-4 space-y-4">
       <h3 className="font-bold text-slate-900">Nouveau ticket</h3>
 
+      {/* Client name */}
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Nom du client *</label>
         <input type="text" value={form.clientName} onChange={update('clientName')} required
@@ -127,24 +137,36 @@ function TicketForm({ onClose }) {
           placeholder="Ex: Mme Adjovi" />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      {/* Service select (full width) */}
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Service *</label>
+        <select value={form.serviceType} onChange={update('serviceType')}
+          className="w-full px-3 py-2.5 rounded-lg border border-slate-300 focus:border-primary outline-none">
+          {SERVICES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+        </select>
+      </div>
+
+      {/* Item picker or simple quantity input */}
+      {showPicker ? (
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Service *</label>
-          <select value={form.serviceType} onChange={update('serviceType')}
-            className="w-full px-3 py-2.5 rounded-lg border border-slate-300 focus:border-primary outline-none">
-            {SERVICES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-          </select>
+          <label className="block text-sm font-medium text-slate-700 mb-2">Articles</label>
+          <ItemPicker
+            value={form.detailedItems}
+            onChange={(val) => setForm((f) => ({ ...f, detailedItems: val }))}
+          />
         </div>
+      ) : (
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Nb pieces</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Nb pièces</label>
           <input type="number" min="1" value={form.items} onChange={update('items')}
             className="w-full px-3 py-2.5 rounded-lg border border-slate-300 focus:border-primary outline-none" />
         </div>
-      </div>
+      )}
 
+      {/* CA facturé + Avance */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">CA facture (FCFA) *</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">CA facturé (FCFA) *</label>
           <input type="number" min="0" value={form.caFacture} onChange={update('caFacture')} required
             className="w-full px-3 py-2.5 rounded-lg border border-slate-300 focus:border-primary outline-none" placeholder="50 000" />
         </div>
@@ -155,6 +177,14 @@ function TicketForm({ onClose }) {
         </div>
       </div>
 
+      {/* Advance warning */}
+      {showAdvanceWarning && (
+        <div className="rounded-lg bg-orange-50 border border-orange-200 px-3 py-2 text-sm text-orange-700">
+          Attention : avance ({advancePct}%) inférieure à {service.minAdvancePct}% du CA facturé
+        </div>
+      )}
+
+      {/* Payment mode */}
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Mode de paiement</label>
         <div className="flex gap-2">
@@ -162,6 +192,21 @@ function TicketForm({ onClose }) {
             <button key={m.id} type="button" onClick={() => setForm((f) => ({ ...f, paymentMode: m.id }))}
               className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
                 form.paymentMode === m.id ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-300'
+              }`}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Intake mode */}
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Mode de dépôt</label>
+        <div className="flex gap-2">
+          {INTAKE_MODES.map((m) => (
+            <button key={m.id} type="button" onClick={() => setForm((f) => ({ ...f, intakeMode: m.id }))}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                form.intakeMode === m.id ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-300'
               }`}>
               {m.label}
             </button>
