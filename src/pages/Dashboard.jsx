@@ -2,16 +2,14 @@ import { useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import * as store from '../store'
 import { useAuth } from '../hooks/useAuth.jsx'
-import { SERVICES } from '../utils/services.jsx'
+import { SERVICES, INTAKE_MODES, DELIVERY_MODES, countItems } from '../utils/services.jsx'
 import { formatFCFA, formatShort } from '../utils/fcfa.jsx'
 import StatCard from '../components/StatCard'
 import { exportWeeklyExcel } from '../utils/exportExcel'
 
-function todayStr() { return new Date().toISOString().slice(0, 10) }
-
 export default function Dashboard() {
   const { isAdmin } = useAuth()
-  const today = todayStr()
+  const today = store.businessDay()
   const [, setRefresh] = useState(0)
   const forceRefresh = useCallback(() => setRefresh((n) => n + 1), [])
 
@@ -57,7 +55,10 @@ export default function Dashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-bold text-slate-900">Tableau de bord</h2>
-          <p className="text-sm text-slate-500">{new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+          <p className="text-sm text-slate-500">
+            {new Date(today + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+            <span className="text-xs text-slate-400 ml-1">(10h→10h)</span>
+          </p>
         </div>
         {pendingCount > 0 && (
           <span className="bg-red-500 text-white text-xs font-bold px-2.5 py-1 rounded-full">{pendingCount} en attente</span>
@@ -91,6 +92,64 @@ export default function Dashboard() {
                 <span>Ecart MoMo: {formatFCFA(closing.momoDiscrepancy)}</span>
               </div>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* Activity summary */}
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+        <h3 className="font-bold text-slate-900 text-sm mb-3">Activité du jour</h3>
+
+        {/* Intake/delivery counts */}
+        <div className="space-y-2 mb-4">
+          <div className="text-sm text-slate-600">
+            Entrées: <strong>{tickets.filter(t => t.intakeMode === 'depot_boutique').length}</strong> dépôts boutique
+            {' · '}<strong>{tickets.filter(t => t.intakeMode === 'collecte').length}</strong> collectes
+          </div>
+          <div className="text-sm text-slate-600">
+            Sorties: <strong>{tickets.filter(t => t.deliveryMode === 'retrait_boutique').length}</strong> retraits boutique
+            {' · '}<strong>{tickets.filter(t => t.deliveryMode === 'livraison').length}</strong> livraisons
+          </div>
+        </div>
+
+        {/* Pieces by service */}
+        <div className="mb-4">
+          <p className="text-xs text-slate-500 mb-1">Pièces & services</p>
+          <div className="flex flex-wrap gap-2">
+            {SERVICES.map(s => {
+              const serviceTickets = tickets.filter(t => t.serviceType === s.id)
+              if (serviceTickets.length === 0) return null
+              const totalPieces = serviceTickets.reduce((sum, t) => sum + countItems(t.items), 0)
+              return (
+                <span key={s.id} className="text-xs bg-slate-100 rounded-full px-2.5 py-1">
+                  {totalPieces} {s.label}
+                </span>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Financial summary */}
+        <div className="border-t border-slate-100 pt-3 space-y-1">
+          <div className="flex justify-between text-sm">
+            <span className="text-slate-600">CA facturé</span>
+            <span className="font-semibold">{formatFCFA(totalCA)}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-slate-600">Encaissé</span>
+            <span className="font-semibold text-green-700">{formatFCFA(totalEncaisse)}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-slate-600">Reste à payer</span>
+            <span className="font-semibold text-amber-600">{formatFCFA(totalCA - totalEncaisse)}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-slate-600">Dépenses</span>
+            <span className="font-semibold text-red-600">{formatFCFA(totalExpenses)}</span>
+          </div>
+          <div className="flex justify-between text-sm border-t border-slate-100 pt-1">
+            <span className="font-medium text-slate-900">Net du jour</span>
+            <span className={`font-bold ${net >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatFCFA(net)}</span>
           </div>
         </div>
       </div>
