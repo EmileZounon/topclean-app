@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import * as store from '../store'
 import { useAuth } from '../hooks/useAuth.jsx'
-import { SERVICES, PAYMENT_MODES } from '../utils/services.jsx'
+import { SERVICES, PAYMENT_MODES, DELIVERY_MODES, INTAKE_MODES, countItems } from '../utils/services.jsx'
 import { formatFCFA } from '../utils/fcfa.jsx'
 import PhotoUpload from '../components/PhotoUpload'
 
@@ -57,8 +57,33 @@ export default function TicketDetail() {
           <Stat label="CA Facture" value={formatFCFA(ticket.caFacture)} />
           <Stat label="Total Paye" value={formatFCFA(ticket.totalPaid)} />
           <Stat label="Reste a Payer" value={formatFCFA(ticket.remainingBalance)} color={ticket.remainingBalance > 0 ? 'text-red-600' : 'text-green-600'} />
-          <Stat label="Nb Pieces" value={ticket.items} />
+          <Stat label="Nb Pièces" value={countItems(ticket.items)} />
         </div>
+        {/* Item breakdown for pressing/lessive */}
+        {Array.isArray(ticket.items) && ticket.items.length > 0 && (
+          <div className="mt-3 bg-slate-50 rounded-lg p-3">
+            <p className="text-xs font-medium text-slate-500 mb-2">Détail des pièces</p>
+            <div className="flex flex-wrap gap-2">
+              {ticket.items.map((item, i) => (
+                <span key={i} className="text-xs bg-white border border-slate-200 rounded-full px-2.5 py-1">
+                  {item.qty}× {item.type === 'autre' ? (item.label || 'Autre') : item.type}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {/* Intake mode */}
+        {ticket.intakeMode && (
+          <div className="mt-2 text-xs text-slate-500">
+            Entrée: {INTAKE_MODES.find(m => m.id === ticket.intakeMode)?.label || ticket.intakeMode}
+          </div>
+        )}
+        {/* Delivery mode */}
+        {ticket.deliveryMode && (
+          <div className="text-xs text-slate-500">
+            Sortie: {DELIVERY_MODES.find(m => m.id === ticket.deliveryMode)?.label || ticket.deliveryMode}
+          </div>
+        )}
         {photo && <img src={photo} alt="Photo" className="mt-3 w-full h-48 object-cover rounded-lg" />}
         {ticket.flagNote && <div className="mt-3 bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg">Note: {ticket.flagNote}</div>}
       </div>
@@ -88,6 +113,23 @@ export default function TicketDetail() {
       {isAdmin && ticket.status === 'pending' && (
         <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 space-y-3">
           <h3 className="font-bold text-slate-900">Validation</h3>
+          {/* Delivery mode selection */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Mode de sortie</label>
+            <div className="flex gap-2">
+              {DELIVERY_MODES.map((m) => (
+                <button key={m.id} type="button" onClick={() => {
+                  store.updateTicketDelivery(id, m.id)
+                  refresh()
+                }}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                    ticket.deliveryMode === m.id ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-300'
+                  }`}>
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <button onClick={handleApprove} className="w-full py-2.5 bg-green-600 text-white font-semibold rounded-lg">Approuver</button>
           <div className="flex gap-2">
             <input type="text" value={flagNote} onChange={(e) => setFlagNote(e.target.value)} placeholder="Raison du signalement..."
