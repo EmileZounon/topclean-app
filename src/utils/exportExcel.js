@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx'
 import * as store from '../store'
-import { SERVICES, PAYMENT_MODES } from './services.jsx'
+import { SERVICES, PAYMENT_MODES, countItems } from './services.jsx'
 
 export function exportWeeklyExcel() {
   const today = new Date()
@@ -19,7 +19,7 @@ export function exportWeeklyExcel() {
   const wb = XLSX.utils.book_new()
 
   // ─── Sheet 1: TICKETS ──────────────────────────
-  const ticketRows = [['Date', 'Client', 'Service', 'Nb Pieces', 'CA Facture', 'Total Paye', 'Reste', 'Mode Paiement', 'Statut']]
+  const ticketRows = [['Date', 'Client', 'Service', 'Nb Pièces', 'Détail Pièces', 'CA Facturé', 'Total Payé', 'Reste', 'Mode Paiement', 'Entrée', 'Sortie', 'Statut']]
   let allTickets = []
   dates.forEach(date => {
     const tickets = store.getTickets(date)
@@ -27,12 +27,18 @@ export function exportWeeklyExcel() {
     tickets.forEach(t => {
       const service = SERVICES.find(s => s.id === t.serviceType)?.label || t.serviceType
       const mode = t.payments?.[0]?.paymentMode || ''
-      const statut = t.status === 'approved' ? 'Approuve' : t.status === 'flagged' ? 'Signale' : 'En attente'
-      ticketRows.push([t.date, t.clientName, service, t.items, t.caFacture, t.totalPaid, t.remainingBalance, mode, statut])
+      const statut = t.status === 'approved' ? 'Approuvé' : t.status === 'flagged' ? 'Signalé' : 'En attente'
+      const nbPieces = countItems(t.items)
+      const detail = Array.isArray(t.items)
+        ? t.items.map(i => `${i.qty}× ${i.type === 'autre' ? (i.label || 'autre') : i.type}`).join(', ')
+        : ''
+      const intake = t.intakeMode === 'collecte' ? 'Collecte' : 'Dépôt boutique'
+      const delivery = t.deliveryMode === 'livraison' ? 'Livraison' : t.deliveryMode === 'retrait_boutique' ? 'Retrait boutique' : ''
+      ticketRows.push([t.date, t.clientName, service, nbPieces, detail, t.caFacture, t.totalPaid, t.remainingBalance, mode, intake, delivery, statut])
     })
   })
   const wsTickets = XLSX.utils.aoa_to_sheet(ticketRows)
-  wsTickets['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 25 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }]
+  wsTickets['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 25 }, { wch: 10 }, { wch: 30 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 12 }]
   XLSX.utils.book_append_sheet(wb, wsTickets, 'TICKETS')
 
   // ─── Sheet 2: DEPENSES ─────────────────────────
