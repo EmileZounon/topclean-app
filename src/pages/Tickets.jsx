@@ -54,7 +54,7 @@ export default function Tickets() {
               </div>
             </div>
             <div className="flex gap-3 mt-2 text-xs text-slate-400">
-              <span>{countItems(t.items)} pièce{countItems(t.items) > 1 ? 's' : ''}</span>
+              <span>{(() => { const n = countItems(t.items); return `${n} pièce${n > 1 ? 's' : ''}` })()}</span>
               <span>Avance: {formatFCFA(t.totalPaid)}</span>
               <span>Reste: {formatFCFA(t.remainingBalance)}</span>
             </div>

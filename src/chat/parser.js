@@ -199,7 +199,6 @@ export function processMessage(text) {
 
       const category = findCategory(text)
       const mode = findPaymentMode(text)
-      const norm = normalize(text)
       // Try to extract description: remove known keywords
       let desc = text.replace(/depense|achat|frais|acheter/gi, '').replace(/\d[\d\s.,]*(?:f(?:cfa)?)?/gi, '').trim()
       for (const alias of Object.keys(MODE_ALIASES)) desc = desc.replace(new RegExp(alias, 'gi'), '').trim()
